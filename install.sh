@@ -1,98 +1,117 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# Create cache directory in shared storage
-mkdir -p "/sdcard/Download/kaito-cache"
-ln -s "/sdcard/Download/kaito-cache" "$HOME/.kaito/cache"
+# Kaito Package Manager Installer
+# Version: 1.1.0
+# License: MIT
 
-# Create database directory
-mkdir -p "$HOME/.kaito/db"
-
-# Kaito installation script
-set -e
-
-# Colors
+# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Get script directory
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Installation paths
 PREFIX="/data/data/com.termux/files/usr"
-BIN_DIR="${PREFIX}/bin"
-ETC_DIR="${PREFIX}/etc/kaito"
-LIB_DIR="${PREFIX}/lib/kaito"
-VAR_DIR="${PREFIX}/var/lib/kaito"
-CACHE_DIR="${PREFIX}/var/cache/kaito"
+BIN_DIR="$PREFIX/bin"
+ETC_DIR="$PREFIX/etc/kaito"
+LIB_DIR="$PREFIX/lib/kaito"
+VAR_DIR="$PREFIX/var/lib/kaito"
+CACHE_SOURCE="/sdcard/Download/kaito-cache"
 
-# Check if script is being run as root
-if [ "$(id -u)" -eq 0 ]; then
-    echo -e "${RED}Error: Do not run as root!${NC}"
-    exit 1
-fi
+# Verify critical files exist
+verify_files() {
+    local missing=0
+    declare -a required_files=(
+        "$SCRIPT_DIR/kaito"
+        "$SCRIPT_DIR/lib/core.sh"
+        "$SCRIPT_DIR/lib/repos.sh"
+        "$SCRIPT_DIR/lib/pkg.sh"
+        "$SCRIPT_DIR/lib/utils.sh"
+        "$SCRIPT_DIR/config/repos.conf"
+    )
 
-# Check dependencies
-check_deps() {
-    local missing=()
-    for dep in git wget jq termux-api; do
-        if ! command -v "${dep}" >/dev/null 2>&1; then
-            missing+=("${dep}")
+    echo -e "${BLUE}Verifying installation files...${NC}"
+    
+    for file in "${required_files[@]}"; do
+        if [ ! -f "$file" ]; then
+            echo -e "${RED}Missing: ${file/$SCRIPT_DIR\//}${NC}"
+            missing=$((missing+1))
         fi
     done
 
-    if [ ${#missing[@]} -gt 0 ]; then
-        echo -e "${YELLOW}Installing missing dependencies...${NC}"
-        pkg update -y
-        pkg install -y "${missing[@]}"
+    if [ $missing -gt 0 ]; then
+        echo -e "${RED}Error: $missing files missing. Please check repository integrity.${NC}"
+        exit 1
     fi
 }
 
-# Main installation
-install_kaito() {
-    echo -e "${GREEN}Starting Kaito installation...${NC}"
+# Create directory structure
+create_dirs() {
+    echo -e "${BLUE}Creating directories...${NC}"
+    mkdir -p "$ETC_DIR" "$LIB_DIR" "$VAR_DIR/sync" || {
+        echo -e "${RED}Failed to create directories!${NC}"
+        exit 1
+    }
     
-    # Create directories
-    echo -e "${YELLOW}Creating directories...${NC}"
-    mkdir -p "${ETC_DIR}" "${LIB_DIR}" "${VAR_DIR}/sync" "${CACHE_DIR}"
-    
-    # Copy files
-    echo -e "${YELLOW}Copying files...${NC}"
-    cp kaito "${BIN_DIR}/kaito"
-    cp lib/*.sh "${LIB_DIR}/"
-    cp config/repos.conf "${ETC_DIR}/"
-    
-    # Set permissions
-    echo -e "${YELLOW}Setting permissions...${NC}"
-    chmod 755 "${BIN_DIR}/kaito"
-    chmod 644 "${LIB_DIR}"/*.sh
-    chmod 644 "${ETC_DIR}/repos.conf"
-    
-    # Initialize database
-    echo -e "${YELLOW}Initializing database...${NC}"
-    touch "${VAR_DIR}/local.db"
-    chmod 644 "${VAR_DIR}/local.db"
-    
-    # Symlink config
-    ln -sf "${ETC_DIR}" "${PREFIX}/etc/kaito"
+    # Create cache directory with user confirmation
+    if [ ! -d "$CACHE_SOURCE" ]; then
+        echo -e "${YELLOW}Create cache directory at $CACHE_SOURCE? [Y/n]${NC}"
+        read -r answer
+        if [[ "$answer" =~ ^[Yy]?$ ]]; then
+            mkdir -p "$CACHE_SOURCE" || {
+                echo -e "${RED}Failed to create cache directory!${NC}"
+                exit 1
+            }
+        fi
+    fi
 }
 
-# Post-install message
+# Install main files
+install_files() {
+    echo -e "${BLUE}Installing files...${NC}"
+    
+    # Main executable
+    install -Dm755 "$SCRIPT_DIR/kaito" "$BIN_DIR/kaito" || {
+        echo -e "${RED}Failed to install main executable!${NC}"
+        exit 1
+    }
+    
+    # Library files
+    install -Dm644 "$SCRIPT_DIR"/lib/*.sh -t "$LIB_DIR" || {
+        echo -e "${RED}Failed to install library files!${NC}"
+        exit 1
+    }
+    
+    # Configuration
+    install -Dm644 "$SCRIPT_DIR/config/repos.conf" "$ETC_DIR/repos.conf" || {
+        echo -e "${RED}Failed to install configuration!${NC}"
+        exit 1
+    }
+    
+    # Create cache symlink
+    ln -sf "$CACHE_SOURCE" "$PREFIX/var/cache/kaito" 2>/dev/null || true
+}
+
+# Post-install setup
 post_install() {
-    echo -e "${GREEN}Installation completed successfully!${NC}"
-    echo -e "\nFirst-time setup:"
-    echo -e "1. Run: ${YELLOW}termux-setup-storage${NC}"
-    echo -e "2. Run: ${YELLOW}kaito -Sy${NC} to update repositories"
-    echo -e "\nUsage examples:"
-    echo -e "  kaito -S package_name    # Install package"
-    echo -e "  kaito -R package_name    # Remove package"
-    echo -e "  kaito -Ss search_term   # Search packages\n"
+    echo -e "\n${GREEN}Installation complete!${NC}"
+    echo -e "${YELLOW}First-time setup required:${NC}"
+    echo -e "1. Run: ${BLUE}termux-setup-storage${NC}"
+    echo -e "2. Run: ${BLUE}kaito -Sy${NC} to update repositories"
+    echo -e "\nView documentation: ${BLUE}man kaito${NC}"
 }
 
-# Main flow
+# Main installation flow
 main() {
-    check_deps
-    install_kaito
+    verify_files
+    create_dirs
+    install_files
     post_install
 }
 
-# Run installation
+# Run main function
 main
