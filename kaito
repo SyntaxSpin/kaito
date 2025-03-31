@@ -1,0 +1,117 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+# Kaito - Pacman-style APK package manager
+VERSION="0.1.0"
+CONFIG_DIR="/data/data/com.termux/files/usr/etc/kaito"
+CACHE_DIR="/sdcard/Download/kaito-cache"
+DB_DIR="$HOME/.kaito/db"
+LOG_FILE="/data/data/com.termux/files/usr/var/log/kaito.log"
+
+# Load libraries
+source "${CONFIG_DIR}/../lib/core.sh"
+source "${CONFIG_DIR}/../lib/repos.sh"
+source "${CONFIG_DIR}/../lib/pkg.sh"
+source "${CONFIG_DIR}/../lib/utils.sh"
+
+# Main function
+main() {
+    check_dependencies
+    parse_args "$@"
+}
+
+# Parse command line arguments
+parse_args() {
+    case "$1" in
+        -S|--sync)
+            shift
+            case "$1" in
+                -y|--refresh)
+                    repo_update
+                    shift
+                    ;;
+                -u|--upgrade)
+                    pkg_upgrade
+                    shift
+                    ;;
+                *)
+                    pkg_install "$@"
+                    ;;
+            esac
+            ;;
+        -R|--remove)
+            shift
+            pkg_remove "$@"
+            ;;
+        -Ss|--search)
+            shift
+            pkg_search "$@"
+            ;;
+        -Q|--query)
+            shift
+            case "$1" in
+                -l|--list)
+                    pkg_list_installed
+                    ;;
+                -i|--info)
+                    shift
+                    pkg_info "$@"
+                    ;;
+                *)
+                    pkg_list_installed
+                    ;;
+            esac
+            ;;
+        -F|--files)
+            shift
+            pkg_files "$@"
+            ;;
+        -V|--version)
+            echo "kaito ${VERSION}"
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        *)
+            echo "Invalid option: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Show help
+show_help() {
+ 
+
+    echo " _  __     _ _  "     
+    echo "| |/ /    (_) |"       
+    echo "| ' / __ _ _| |_ ___"  
+    echo "|  < / _` | | __/ _ \ "
+    echo "| . \ (_| | | || (_) |""
+    echo "|_|\_\__,_|_|\__\___/"
+    echo  
+    echo  
+    echo "APK package manager By SyntaxSpin (v${VERSION})"
+    echo
+    echo "Usage: kaito <operation> [...]"
+    echo
+    echo "Operations:"
+    echo "  -S, --sync          Install packages"
+    echo "      -y, --refresh   Refresh repository databases"
+    echo "      -u, --upgrade   Upgrade all packages"
+    echo "  -R, --remove        Remove packages"
+    echo "  -Ss, --search       Search for packages"
+    echo "  -Q, --query         Query local package database"
+    echo "      -l, --list      List installed packages"
+    echo "      -i, --info      Show package information"
+    echo "  -F, --files         Show files owned by package"
+    echo "  -V, --version       Show version information"
+    echo "  -h, --help          Show this help message"
+    echo
+    echo "Example:"
+    echo "  kaito -Syu          # Update and upgrade all packages"
+    echo "  kaito -S mpv        # Install mpv"
+    echo "  kaito -R mpv        # Remove mpv"
+}
+
+main "$@"
